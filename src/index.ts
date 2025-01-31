@@ -47,11 +47,23 @@ async function uploadHandler(request: IRequest, env: Env, ctx: ExecutionContext)
         return error(401, 'invalid auth');
     }
 
-    const digestStream = new crypto.DigestStream('SHA-256');
     if (request.body == null) {
         return error(400);
     }
-    await request.body.pipeTo(digestStream);
+    let c = 0;
+    const digestStream = new crypto.DigestStream('SHA-256');
+    const w = digestStream.getWriter();
+    for await (const chunk of request.body) {
+        c += chunk.length;
+        if (c > 1024 * 128) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            c = 0;
+        }
+        await w.write(chunk);
+    }
+    await w.close();
+
+    // await request.body.pipeTo(digestStream);
     const digest = await digestStream.digest;
     return new Response(Buffer.from(digest).toString('base64'), {status: 200});
 }
